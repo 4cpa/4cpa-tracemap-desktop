@@ -1,0 +1,85 @@
+name: Desktop-Apps bauen
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, name: windows-x64 }
+          - { os: ubuntu-latest, name: linux-x64 }
+          - { os: macos-latest, name: macos-arm64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: traceroute installieren (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y traceroute
+
+      - name: Abhängigkeiten installieren
+        run: python -m pip install -r requirements-desktop.txt
+
+      - name: Symbole erzeugen
+        run: python packaging/make_icons.py
+
+      - name: App bauen
+        run: pyinstaller --noconfirm --distpath dist --workpath build/pyi packaging/4cpa-tracemap.spec
+
+      - name: Selbsttest (Start, Traceroute, PDF, Beenden)
+        run: python packaging/smoke_test.py
+
+      - name: Verpacken (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path "dist/4CPA TraceMap" -DestinationPath "4CPA-TraceMap-${{ matrix.name }}.zip"
+
+      - name: Verpacken (Linux)
+        if: runner.os == 'Linux'
+        run: tar -czf "4CPA-TraceMap-${{ matrix.name }}.tar.gz" -C dist "4CPA TraceMap"
+
+      - name: Verpacken (macOS)
+        if: runner.os == 'macOS'
+        run: ditto -c -k --keepParent "dist/4CPA TraceMap.app" "4CPA-TraceMap-${{ matrix.name }}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 4CPA-TraceMap-${{ matrix.name }}
+          path: |
+            4CPA-TraceMap-${{ matrix.name }}.zip
+            4CPA-TraceMap-${{ matrix.name }}.tar.gz
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Prüfsummen
+        run: cd artifacts && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+
+      - name: Release anlegen
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" artifacts/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "4CPA TraceMap ${GITHUB_REF_NAME}" \
+            --notes-file RELEASE_NOTES.md

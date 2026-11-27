@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+build/
+dist/
+*.db
+server.log
+build.log
+data/*.mmdb
+packaging/icons/
+.DS_Store
+# lokale macOS-Startprogramme (nicht Teil der plattformübergreifenden App)
+4CPA TraceMap.app/
+TraceMap.applescript

@@ -1,0 +1,10 @@
+fastapi>=0.110
+uvicorn>=0.29
+pydantic>=2
+dnspython>=2.4
+pyspf>=2.0.14
+dkimpy>=1.1
+maxminddb>=2.5
+reportlab>=4.2
+pillow>=10
+pyinstaller>=6.6

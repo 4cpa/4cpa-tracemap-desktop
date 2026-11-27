@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>4CPA TraceMap</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="/static/logo.png">
+<link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
+<style>
+  :root { --bg:#12151c; --panel:#1b2030; --line:#2c3350; --fg:#e6e9f2; --mute:#8a93b2; --acc:#4da3ff; --warn:#ffb454; --dc:#c678ff; --bad:#ff6b6b; --ok:#5ed39a; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.45 -apple-system,system-ui,sans-serif; background:var(--bg); color:var(--fg); display:flex; height:100vh; }
+  #side { width:420px; min-width:340px; background:var(--panel); border-right:1px solid var(--line); display:flex; flex-direction:column; overflow:hidden; }
+  #side.drag { outline:2px dashed var(--acc); outline-offset:-6px; }
+  #side header { padding:12px 16px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px; }
+  #side header img { width:34px; height:34px; border-radius:8px; background:#fff; padding:2px; flex:none; }
+  #side header .name { font-weight:600; font-size:16px; flex:1; }
+  #gear { background:none; border:1px solid var(--line); color:var(--mute); border-radius:6px; cursor:pointer; padding:4px 8px; font-size:15px; }
+  #gear:hover { color:var(--fg); }
+  select { background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:5px 6px; font:inherit; }
+  .tabs { display:flex; border-bottom:1px solid var(--line); }
+  .tabs button { flex:1; padding:10px; background:none; border:0; color:var(--mute); cursor:pointer; font:inherit; border-bottom:2px solid transparent; }
+  .tabs button.on { color:var(--fg); border-color:var(--acc); }
+  .form { padding:12px 16px; border-bottom:1px solid var(--line); }
+  input[type=text], input[type=search], input[type=password], textarea { width:100%; background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:8px; font:inherit; }
+  textarea { height:130px; font:12px ui-monospace,monospace; resize:vertical; }
+  #ipv { margin-top:8px; width:100%; padding:7px; }
+  .go { margin-top:8px; width:100%; padding:9px; background:var(--acc); color:#04121f; border:0; border-radius:6px; font-weight:600; cursor:pointer; }
+  .go:disabled { opacity:.5; cursor:wait; }
+  .ghost { margin-top:6px; width:100%; padding:7px; background:none; border:1px solid var(--line); color:var(--mute); border-radius:6px; cursor:pointer; font:inherit; }
+  .ghost:hover { color:var(--fg); border-color:var(--mute); }
+  .hint { color:var(--mute); font-size:12px; margin-top:6px; }
+  #scroll { flex:1; overflow:auto; }
+  #status { padding:10px 16px; color:var(--mute); font-size:13px; }
+  #status.err { color:var(--bad); }
+  .warn { margin:6px 16px; padding:7px 10px; background:#3a2d12; color:var(--warn); border-radius:6px; font-size:13px; }
+  .export { padding:8px 16px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; border-bottom:1px solid var(--line); }
+  .export a, .export button { color:var(--acc); text-decoration:none; border:1px solid var(--line); padding:4px 10px; border-radius:6px; font-size:13px; background:none; cursor:pointer; font-family:inherit; }
+  .export .del { margin-left:auto; color:var(--bad); }
+  .sec { padding:8px 16px; border-bottom:1px solid var(--line); font-size:13px; }
+  .sec b { font-weight:600; } .sec .m { color:var(--mute); }
+  .sec summary { cursor:pointer; font-weight:600; }
+  .sec ul { margin:4px 0 0; padding-left:18px; } .sec li { word-break:break-all; }
+  .hash { font:11px ui-monospace,monospace; color:var(--mute); }
+  .hash button { background:none; border:1px solid var(--line); color:var(--acc); border-radius:5px; cursor:pointer; font-size:11px; padding:1px 6px; margin-left:6px; }
+  .hop { padding:10px 16px; border-bottom:1px solid var(--line); cursor:pointer; display:flex; gap:10px; }
+  .hop:hover { background:#222943; }
+  .num { flex:none; width:24px; height:24px; border-radius:50%; background:var(--acc); color:#04121f; font-weight:700; font-size:12px; display:flex; align-items:center; justify-content:center; }
+  .num.dc { background:var(--dc); } .num.none { background:var(--line); color:var(--mute); }
+  .hop b { font-weight:600; } .hop small { color:var(--mute); display:block; }
+  .tag { font-size:11px; background:#2f2447; color:var(--dc); padding:1px 6px; border-radius:8px; margin-left:4px; }
+  .tag.sus { background:#3a2d12; color:var(--warn); } .tag.bad { background:#3d1c1c; color:var(--bad); }
+  h4 { margin:0; padding:10px 16px 4px; color:var(--mute); font-size:12px; text-transform:uppercase; letter-spacing:.05em; display:flex; justify-content:space-between; align-items:center; }
+  h4 button { background:none; border:0; color:var(--acc); cursor:pointer; font-size:12px; text-transform:none; letter-spacing:0; padding:0; }
+  h4 button:hover { color:var(--bad); }
+  #hsearch { margin:4px 16px 6px; width:calc(100% - 32px); padding:6px 8px; }
+  .hrow { display:flex; align-items:center; padding:0 12px 0 12px; gap:6px; }
+  .hrow:hover { background:#222943; }
+  .hist { padding:6px 0; cursor:pointer; font-size:13px; display:flex; justify-content:space-between; gap:8px; flex:1; min-width:0; }
+  .hist .t { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .hist .d { color:var(--mute); flex:none; }
+  .chip { font-size:10px; background:#243052; color:#9db7ff; padding:0 6px; border-radius:8px; margin-left:4px; }
+  .hrow .x { color:var(--mute); background:none; border:0; cursor:pointer; font-size:14px; padding:2px 4px; flex:none; }
+  .hrow .x:hover { color:var(--bad); }
+  #cmpbar { padding:4px 16px; display:none; }
+  #cmpbar button { width:100%; padding:6px; background:none; border:1px solid var(--acc); color:var(--acc); border-radius:6px; cursor:pointer; font:inherit; }
+  .notes { padding:10px 16px; }
+  .notes textarea { height:70px; font:13px -apple-system,system-ui,sans-serif; }
+  .notes input { margin-top:6px; }
+  #foot { padding:8px 16px; border-top:1px solid var(--line); font-size:12px; color:var(--mute); display:flex; justify-content:space-between; align-items:center; }
+  #foot button { background:none; border:0; color:var(--acc); cursor:pointer; font:inherit; padding:0; }
+  #map { flex:1; }
+  .hopnum { background:none; border:0; box-shadow:none; color:#04121f; font-weight:700; font-size:11px; padding:0; }
+  .hopnum:before { display:none; }
+  .leaflet-popup-content { font:13px/1.4 -apple-system,system-ui,sans-serif; color:#111; }
+  path.route { animation:flow 1.2s linear infinite; }
+  @keyframes flow { to { stroke-dashoffset:-24; } }
+  .modal { position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:center; justify-content:center; z-index:2000; }
+  .modal.on { display:flex; }
+  .modal .box { background:var(--panel); border:1px solid var(--line); border-radius:10px; max-width:560px; width:92%; padding:20px 24px; max-height:88vh; overflow:auto; }
+  .modal h3 { margin:0 0 12px; display:flex; align-items:center; gap:10px; }
+  .modal h3 img { width:32px; height:32px; border-radius:7px; background:#fff; padding:2px; }
+  .modal dl { margin:0 0 12px; display:grid; grid-template-columns:110px 1fr; gap:6px 10px; }
+  .modal dt { color:var(--mute); } .modal dd { margin:0; }
+  .modal a { color:var(--acc); }
+  .modal p { color:var(--mute); font-size:13px; margin:6px 0 0; }
+  .modal h5 { margin:14px 0 0; font-size:13px; }
+  .modal label { display:block; margin-top:10px; font-size:13px; color:var(--mute); }
+  .modal .row { display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+  .modal button.b { padding:8px 14px; background:var(--acc); color:#04121f; border:0; border-radius:6px; font-weight:600; cursor:pointer; }
+  .modal button.b.g { background:none; border:1px solid var(--line); color:var(--fg); }
+  #r-body { height:260px; font:12px ui-monospace,monospace; }
+  table.cmp { width:100%; border-collapse:collapse; font-size:12px; } table.cmp td, table.cmp th { padding:3px 4px; border-bottom:1px solid var(--line); text-align:left; }
+</style>
+</head>
+<body>
+<div id="side">
+  <header>
+    <img src="/static/logo.png" alt="4CPA">
+    <span class="name">4CPA TraceMap</span>
+    <button id="gear" title="Settings">⚙</button>
+    <select id="lang" aria-label="Language">
+      <option value="de">DE</option><option value="en">EN</option><option value="fr">FR</option>
+    </select>
+  </header>
+  <div class="tabs">
+    <button id="t-web" class="on" data-i18n="tab_web"></button>
+    <button id="t-mail" data-i18n="tab_mail"></button>
+  </div>
+  <div class="form" id="f-web">
+    <input type="text" id="target" data-i18n-ph="ph_target" autocomplete="off">
+    <select id="ipv">
+      <option value="auto" data-i18n="ip_auto"></option>
+      <option value="4" data-i18n="ip_4"></option>
+      <option value="6" data-i18n="ip_6"></option>
+    </select>
+    <button class="go" id="go-web" data-i18n="btn_trace"></button>
+    <button class="ghost" id="reset-web" data-i18n="btn_reset"></button>
+  </div>
+  <div class="form" id="f-mail" hidden>
+    <textarea id="headers" data-i18n-ph="ph_headers"></textarea>
+    <input type="file" id="eml" accept=".eml,.txt" multiple style="margin-top:6px;width:100%">
+    <div class="hint" data-i18n="drop_hint"></div>
+    <button class="go" id="go-mail" data-i18n="btn_analyze"></button>
+    <button class="ghost" id="reset-mail" data-i18n="btn_reset"></button>
+  </div>
+  <div id="scroll">
+    <div id="status"></div>
+    <div id="result"></div>
+    <h4><span data-i18n="history"></span><button id="clear-all" data-i18n="btn_clear_history"></button></h4>
+    <input type="search" id="hsearch" data-i18n-ph="ph_search">
+    <div id="cmpbar"><button id="cmpbtn" data-i18n="btn_compare"></button></div>
+    <div id="history"></div>
+  </div>
+  <div id="foot">
+    <span data-i18n="footer"></span>
+    <button id="imp" data-i18n="imprint"></button>
+  </div>
+</div>
+<div id="map"></div>
+
+<div class="modal" id="m-imprint">
+  <div class="box">
+    <h3><img src="/static/logo.png" alt=""><span data-i18n="imprint_title"></span></h3>
+    <dl>
+      <dt data-i18n="imprint_operator"></dt><dd>Transivroom Division</dd>
+      <dt data-i18n="imprint_project"></dt><dd>4CPA TraceMap</dd>
+      <dt data-i18n="imprint_address"></dt><dd>Transivroom<br>Kasparstrasse 17<br>3027 Bern<br><span data-i18n="country"></span></dd>
+      <dt data-i18n="imprint_web"></dt><dd><a href="https://www.transivroom.ch" target="_blank" rel="noopener">www.transivroom.ch</a></dd>
+      <dt data-i18n="imprint_contact"></dt><dd><a href="mailto:admin@4cpa.ch">admin@4cpa.ch</a></dd>
+    </dl>
+    <h5 data-i18n="imprint_privacy_h"></h5>
+    <p data-i18n="imprint_privacy"></p>
+    <p>This product includes GeoLite2 data created by MaxMind, available from <a href="https://www.maxmind.com" target="_blank" rel="noopener">https://www.maxmind.com</a>.</p>
+    <div class="row"><button class="b" data-close data-i18n="close"></button></div>
+  </div>
+</div>
+
+<div class="modal" id="m-settings">
+  <div class="box">
+    <h3 data-i18n="settings_title"></h3>
+    <label style="color:var(--fg)"><input type="checkbox" id="s-local"> <span data-i18n="local_only"></span></label>
+    <p id="s-hint"></p>
+    <label for="s-key" data-i18n="abuseipdb_key"></label>
+    <input type="password" id="s-key" autocomplete="off">
+    <p id="s-keyhint"></p>
+    <div class="row"><button class="b" id="s-save" data-i18n="btn_save"></button><button class="b g" data-close data-i18n="close"></button><button class="b g" id="s-quit" data-i18n="btn_quit" hidden style="margin-left:auto;color:#ff6b6b"></button></div>
+  </div>
+</div>
+
+<div class="modal" id="m-report">
+  <div class="box">
+    <h3 data-i18n="report_modal_title"></h3>
+    <label data-i18n="report_to"></label><div id="r-to"></div>
+    <label data-i18n="report_subject"></label><input type="text" id="r-subj">
+    <label></label><textarea id="r-body"></textarea>
+    <p data-i18n="report_hint"></p>
+    <div class="row"><button class="b" id="r-copy" data-i18n="btn_copy"></button><button class="b g" id="r-mail" data-i18n="btn_mailto"></button><button class="b g" data-close data-i18n="close"></button></div>
+  </div>
+</div>
+
+<script src="/static/vendor/leaflet/leaflet.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+// ---------- Sprache ----------
+let I18N = {}, lang = 'de', current = null, statusKey = 'status_ready', statusErr = null, settings = {};
+function tr(key, p = {}) {
+  const s = (I18N[lang] && I18N[lang][key]) ?? (I18N.de && I18N.de[key]) ?? key;
+  return s.replace(/\{(\w+)\}/g, (_, k) => p[k] ?? '');
+}
+function applyLang() {
+  document.documentElement.lang = lang;
+  document.querySelectorAll('[data-i18n]').forEach(e => e.textContent = tr(e.dataset.i18n));
+  document.querySelectorAll('[data-i18n-ph]').forEach(e => e.placeholder = tr(e.dataset.i18nPh));
+  $('lang').value = lang; $('gear').title = tr('btn_settings');
+  renderStatus(); renderSettingsHints();
+  if (current) show(current, false);
+  if (I18N.de) loadHistory();
+}
+function setLang(l) { lang = l; localStorage.setItem('lang', l); applyLang(); }
+async function initI18n() {
+  I18N = await (await fetch('/static/i18n.json')).json();
+  const nav = (navigator.language || 'de').slice(0, 2);
+  lang = localStorage.getItem('lang') || (I18N[nav] ? nav : 'de');
+  applyLang();
+}
+$('lang').onchange = e => setLang(e.target.value);
+
+// ---------- Karte ----------
+const map = L.map('map', {worldCopyJump:true}).setView([30,10], 2);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:18, attribution:'© OpenStreetMap'}).addTo(map);
+window.addEventListener('resize', () => map.invalidateSize());
+let layer = L.layerGroup().addTo(map), markers = {};
+
+// Großkreis-Bogen zwischen zwei Punkten (Slerp)
+function arc(a, b, n = 40) {
+  const R = Math.PI / 180, [la1, lo1, la2, lo2] = [a[0]*R, a[1]*R, b[0]*R, b[1]*R];
+  const d = 2 * Math.asin(Math.sqrt(Math.sin((la2-la1)/2)**2 + Math.cos(la1)*Math.cos(la2)*Math.sin((lo2-lo1)/2)**2));
+  if (d < 1e-6) return [a, b];
+  const pts = []; let prevLon = null;
+  for (let i = 0; i <= n; i++) {
+    const f = i / n, A = Math.sin((1-f)*d)/Math.sin(d), B = Math.sin(f*d)/Math.sin(d);
+    const x = A*Math.cos(la1)*Math.cos(lo1) + B*Math.cos(la2)*Math.cos(lo2);
+    const y = A*Math.cos(la1)*Math.sin(lo1) + B*Math.cos(la2)*Math.sin(lo2);
+    const z = A*Math.sin(la1) + B*Math.sin(la2);
+    let lon = Math.atan2(y, x) / R;
+    if (prevLon !== null) { while (lon - prevLon > 180) lon -= 360; while (lon - prevLon < -180) lon += 360; }
+    prevLon = lon; pts.push([Math.atan2(z, Math.hypot(x, y)) / R, lon]);
+  }
+  return pts;
+}
+function drawRoute(pts, color) {
+  for (let i = 1; i < pts.length; i++)
+    L.polyline(arc(pts[i-1], pts[i]), {color, weight:2, dashArray:'6 6', className:'route'}).addTo(layer);
+}
+
+// ---------- UI-Grundlagen ----------
+function tab(web) {
+  $('t-web').classList.toggle('on', web); $('t-mail').classList.toggle('on', !web);
+  $('f-web').hidden = !web; $('f-mail').hidden = web;
+}
+$('t-web').onclick = () => tab(true); $('t-mail').onclick = () => tab(false);
+$('target').onkeydown = e => { if (e.key === 'Enter') $('go-web').click(); };
+document.querySelectorAll('.modal').forEach(m => m.onclick = e => { if (e.target === m || e.target.hasAttribute('data-close')) m.classList.remove('on'); });
+$('imp').onclick = () => $('m-imprint').classList.add('on');
+
+function setStatus(key, err, p) { statusKey = key; statusErr = err || null; statusP = p || {}; renderStatus(); }
+let statusP = {};
+function renderStatus() { $('status').textContent = statusErr ?? tr(statusKey, statusP); $('status').className = statusErr ? 'err' : ''; }
+
+async function postJSON(url, body) {
+  const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({...body, lang})});
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.detail || r.statusText);
+  return d;
+}
+async function run(btn, fn, key) {
+  btn.disabled = true; setStatus(key);
+  try { const d = await fn(); show(d); loadHistory(); setStatus('status_done'); }
+  catch (e) { setStatus(null, e.message); }
+  btn.disabled = false;
+}
+$('go-web').onclick = () => run($('go-web'), () => postJSON('/api/trace/web', {target:$('target').value, ip_version:$('ipv').value}), 'status_tracing');
+$('go-mail').onclick = async () => {
+  const files = [...$('eml').files];
+  if (files.length) return batch(files);
+  run($('go-mail'), () => postJSON('/api/trace/mail', {headers:$('headers').value}), 'status_analyzing');
+};
+
+// ---------- Stapelverarbeitung / Drag & Drop ----------
+async function batch(files) {
+  tab(false); const btn = $('go-mail'); btn.disabled = true; let last = null;
+  for (let i = 0; i < files.length; i++) {
+    setStatus('batch_progress', null, {i:i+1, n:files.length});
+    try { last = await postJSON('/api/trace/mail', {headers: await files[i].text()}); }
+    catch (e) { setStatus(null, `${files[i].name}: ${e.message}`); btn.disabled = false; await loadHistory(); return; }
+  }
+  if (last) show(last);
+  await loadHistory(); setStatus('status_done'); btn.disabled = false; $('eml').value = '';
+}
+['side','map'].forEach(id => {
+  const el = $(id);
+  el.addEventListener('dragover', e => { e.preventDefault(); $('side').classList.add('drag'); });
+  el.addEventListener('dragleave', () => $('side').classList.remove('drag'));
+  el.addEventListener('drop', e => {
+    e.preventDefault(); $('side').classList.remove('drag');
+    const fs = [...e.dataTransfer.files].filter(f => /\.(eml|txt)$/i.test(f.name));
+    if (fs.length) batch(fs);
+  });
+});
+
+// ---------- Anzeige ----------
+const place = h => [h.city, h.region, h.country].filter(Boolean).join(', ');
+const hopLabel = h => h.label_key ? tr(h.label_key) : h.label;
+const warnText = w => typeof w === 'string' ? w : tr(w.key, w);
+const dt = s => s ? String(s).slice(0, 10) : '';
+
+function repTag(h) {
+  const r = h.reputation; if (!r || r.verdict === 'ok') return '';
+  const why = [...(r.dnsbl || []), ...(r.tor ? [tr('rep_tor')] : []), ...(r.pbl ? ['PBL'] : []),
+               ...(r.abuseipdb ? ['AbuseIPDB ' + r.abuseipdb.score + '%'] : [])].join(', ');
+  const cls = r.verdict === 'bad' ? 'bad' : 'sus';
+  return `<span class="tag ${cls}" title="${esc(why)}">${esc(tr(r.verdict === 'bad' ? 'rep_bad' : 'rep_suspicious'))}: ${esc(why)}</span>`;
+}
+function mailSection(d) {
+  const m = d.meta, a = d.analysis || {};
+  const dk = a.dkim ? (a.dkim.result === 'not_verifiable' ? tr('dkim_not_verifiable') : a.dkim.result) : '–';
+  let h = `<div class="sec"><div><b>${esc(tr('from'))}:</b> ${esc(m.from)}</div><div><b>${esc(tr('return_path'))}:</b> ${esc(m.return_path)}</div>
+    <div><b>SPF</b> ${esc(m.spf||'–')} · <b>DKIM</b> ${esc(m.dkim||'–')} · <b>DMARC</b> ${esc(m.dmarc||'–')}</div>`;
+  if (a.spf) h += `<div class="m">${esc(tr('spf_own'))}: ${esc(a.spf.result)} · ${esc(tr('dkim_own'))}: ${esc(dk)}</div>`;
+  h += '</div>';
+  if (a.links && a.links.length) {
+    h += `<div class="sec"><details><summary>${esc(tr('links'))} (${a.links.length})</summary><ul>` +
+      a.links.map(l => `<li>${esc(l.host)} ${l.flags.length ? `<span class="tag bad">${esc(l.flags.join(', '))}</span>` : ''}</li>`).join('') + '</ul></details></div>';
+  }
+  return h;
+}
+function domainSection(d) {
+  const o = d.domain; if (!o || !o.host) return '';
+  const r = o.rdap || {}, t = o.tls || {}, ch = (o.http || {}).chain || [], cdn = (o.http || {}).cdn;
+  const row = (k, v) => v ? `<li><b>${esc(k)}:</b> ${esc(v)}</li>` : '';
+  let li = row(tr('registered'), r.registered ? dt(r.registered) + (r.age_days != null ? ' (' + tr('age_days', {n:r.age_days}) + ')' : '') : '')
+    + row(tr('expires'), dt(r.expires)) + row(tr('registrar'), r.registrar) + row(tr('nameservers'), (r.nameservers || []).join(', '))
+    + row(tr('tls_cert'), t.error ? t.error : [t.issuer, t.not_after ? tr('valid_until') + ' ' + t.not_after.slice(0, 12) : ''].filter(Boolean).join(' · '))
+    + row(tr('cdn'), cdn)
+    + row(tr('redirects'), ch.map(c => (c.status || c.error || '') + ' ' + c.url).join(' → '));
+  for (const [k, v] of Object.entries(o.dns || {})) li += row(k, v.join(', '));
+  return `<div class="sec"><details><summary>${esc(tr('sec_domain'))}</summary><ul>${li}</ul></details></div>`;
+}
+function hashSection(d) {
+  if (!d.sha256) return `<div class="sec hash">${esc(tr('verify_none'))}</div>`;
+  return `<div class="sec hash">${esc(tr('sha256'))}: ${esc(d.sha256.slice(0, 20))}… <button id="vbtn">${esc(tr('btn_verify'))}</button> <span id="vres"></span></div>`;
+}
+function notesSection(d) {
+  return `<div class="notes"><textarea id="n-text" placeholder="${esc(tr('notes'))}">${esc(d.notes || '')}</textarea>
+    <input type="text" id="n-tags" placeholder="${esc(tr('tags'))}" value="${esc((d.tags || []).join(', '))}">
+    <button class="ghost" id="n-save">${esc(tr('btn_save'))}</button></div>`;
+}
+
+function show(d, fit = true) {
+  current = d;
+  layer.clearLayers(); markers = {};
+  const pts = [];
+  const ex = f => `<a href="/api/results/${d.id}/export?format=${f}&lang=${lang}">${f === 'geojson' ? 'GeoJSON' : f.toUpperCase()}</a>`;
+  let html = `<div class="export">${esc(tr('export'))} ${['json','csv','geojson','pdf'].map(ex).join(' ')}
+    <button id="rep-btn">${esc(tr('btn_report'))}</button>
+    <button class="del" id="del-cur">${esc(tr('delete'))}</button></div>`;
+  (d.warnings || []).forEach(w => html += `<div class="warn">⚠ ${esc(warnText(w))}</div>`);
+  html += hashSection(d);
+  html += d.kind === 'mail' ? mailSection(d) : domainSection(d);
+  d.hops.forEach((h, i) => {
+    const has = h.lat != null;
+    const cls = has ? (h.datacenter ? 'dc' : '') : 'none';
+    const lab = hopLabel(h);
+    const meas = h.rtt_min != null ? `${h.rtt_min}–${h.rtt_max} ms · ${esc(tr('jitter'))} ${h.jitter_ms} ms` + (h.loss_pct ? ` · ${esc(tr('loss'))} ${h.loss_pct}%` : '')
+                 : (h.loss_pct === 100 ? '' : (h.rtt_ms ? h.rtt_ms + ' ms' : ''));
+    html += `<div class="hop" data-i="${i}"><div class="num ${cls}">${h.hop}</div><div>
+      <b>${esc(lab || h.ip || tr('no_reply'))}</b>${h.datacenter ? `<span class="tag">${esc(tr('datacenter'))}</span>` : ''}${repTag(h)}${h.geo_suspect ? `<span class="tag sus">${esc(tr('geo_suspect_tag'))}</span>` : ''}
+      <small>${esc(lab ? h.ip : '')} ${esc(h.hostname || h.hostname_header || '')}</small>
+      <small>${esc(place(h)) || (h.private ? esc(tr('private_net')) : '')}</small>
+      ${h.facility ? `<small>🏢 ${esc(h.facility.name)} (${esc(tr('km_away', {km:h.facility.distance_km}))})</small>` : ''}
+      ${h.abuse_contact ? `<small>✉ ${esc(tr('abuse'))}: ${esc(h.abuse_contact)}</small>` : ''}
+      <small>${esc(h.asn || '')} ${meas ? '· ' + meas : ''} ${h.timestamp ? '· ' + esc(h.timestamp) : ''}</small></div></div>`;
+    if (has) {
+      pts.push([h.lat, h.lon]);
+      const rv = h.reputation && h.reputation.verdict;
+      const fill = h.datacenter ? '#c678ff' : '#4da3ff';
+      const ring = rv === 'bad' ? '#ff6b6b' : rv === 'suspicious' ? '#ffb454' : '#fff';
+      const mk = L.circleMarker([h.lat, h.lon], {radius:9, color:ring, weight:3, fillColor:fill, fillOpacity:1}).addTo(layer);
+      mk.bindTooltip(String(h.hop), {permanent:true, direction:'center', className:'hopnum', offset:[0,0]});
+      mk.bindPopup(`<b>${esc(tr('popup_hop', {n:h.hop}))}</b><br>${esc(h.ip)}<br>${esc(h.hostname || h.hostname_header || '')}<br>
+        ${esc(place(h))}<br>${esc(h.asn || '')}<br>${esc(h.isp || '')}${h.datacenter ? '<br><b>' + esc(tr('popup_dc')) + '</b>' : ''}
+        ${h.facility ? '<br>🏢 ' + esc(h.facility.name) + ' (' + h.facility.distance_km + ' km)' : ''}
+        ${h.abuse_contact ? '<br>✉ ' + esc(h.abuse_contact) : ''}
+        ${meas ? '<br>' + meas : ''}`);
+      markers[i] = mk;
+      if (h.facility) {
+        L.circleMarker([h.facility.lat, h.facility.lon], {radius:5, color:'#c678ff', weight:2, fillColor:'#fff', fillOpacity:.9})
+          .bindPopup('<b>' + esc(tr('possible_dc')) + '</b><br>' + esc(h.facility.name) + '<br>' + esc(h.facility.operator || '') + '<br>' + esc(h.facility.city || '') + ', ' + esc(h.facility.country || '')).addTo(layer);
+      }
+    }
+  });
+  drawRoute(pts, '#4da3ff');
+  html += notesSection(d);
+  $('result').innerHTML = html;
+  bindResult(d);
+  map.invalidateSize();
+  if (fit && pts.length) map.fitBounds(pts, {padding:[50,50], maxZoom:6});
+}
+function bindResult(d) {
+  $('del-cur').onclick = () => delResult(d.id);
+  $('rep-btn').onclick = () => openReport(d.id);
+  if ($('vbtn')) $('vbtn').onclick = async () => {
+    const r = await (await fetch(`/api/results/${d.id}/verify`)).json();
+    $('vres').textContent = tr(r.status === 'ok' ? 'verify_ok' : r.status === 'mismatch' ? 'verify_bad' : 'verify_none');
+    $('vres').style.color = r.status === 'ok' ? 'var(--ok)' : 'var(--bad)';
+  };
+  $('n-save').onclick = async () => {
+    const tags = $('n-tags').value.split(',').map(s => s.trim()).filter(Boolean);
+    const r = await fetch(`/api/results/${d.id}?lang=${lang}`, {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({notes:$('n-text').value, tags})});
+    if (r.ok) { d.notes = $('n-text').value; d.tags = tags; setStatus('saved'); loadHistory(); }
+  };
+  document.querySelectorAll('.hop').forEach(el => el.onclick = () => {
+    const mk = markers[el.dataset.i]; if (mk) { map.setView(mk.getLatLng(), Math.max(map.getZoom(), 5)); mk.openPopup(); }
+  });
+}
+
+// ---------- Meldung ----------
+let draft = null;
+async function openReport(id) {
+  const r = await fetch(`/api/results/${id}/report-draft`);
+  if (!r.ok) { setStatus(null, (await r.json()).detail); return; }
+  draft = await r.json();
+  $('r-to').innerHTML = draft.to.length ? draft.to.map(t => `<div>${esc(t.email)} <span style="color:var(--mute)">(${esc(t.ip)} ${esc(t.asn || '')})</span></div>`).join('')
+    : `<div style="color:var(--warn)">${esc(tr('no_abuse_contact'))}</div>`;
+  $('r-subj').value = draft.subject; $('r-body').value = draft.body;
+  $('m-report').classList.add('on');
+}
+$('r-copy').onclick = async () => {
+  await navigator.clipboard.writeText(`${$('r-subj').value}\n\n${$('r-body').value}`);
+  $('r-copy').textContent = tr('copied'); setTimeout(() => $('r-copy').textContent = tr('btn_copy'), 1500);
+};
+$('r-mail').onclick = () => {
+  const to = draft.to.slice(0, 3).map(t => t.email).join(',');
+  const body = $('r-body').value.slice(0, 1500) + ($('r-body').value.length > 1500 ? '\n[...] (paste full text here)' : '');
+  location.href = `mailto:${to}?subject=${encodeURIComponent($('r-subj').value)}&body=${encodeURIComponent(body)}`;
+};
+
+// ---------- Verlauf / Vergleich ----------
+let histCount = 0, picked = new Set();
+async function loadHistory() {
+  const rows = await (await fetch('/api/results?q=' + encodeURIComponent($('hsearch').value))).json();
+  histCount = rows.length;
+  $('clear-all').hidden = !rows.length;
+  $('history').innerHTML = rows.length ? rows.map(r => `<div class="hrow"><input type="checkbox" data-pick="${r.id}" ${picked.has(r.id) ? 'checked' : ''} title="${esc(tr('compare_hint'))}">
+    <div class="hist" data-id="${r.id}"><span class="t">${r.kind === 'mail' ? '✉' : '🌐'} ${esc(r.query).slice(0,34)}${r.tags.map(t => `<span class="chip">${esc(t)}</span>`).join('')}${r.has_notes ? ' 📝' : ''}</span><span class="d">${esc(r.created.slice(5,16).replace('T',' '))}</span></div>
+    <button class="x" data-del="${r.id}" title="${esc(tr('delete_one'))}">✕</button></div>`).join('')
+    : `<div class="hrow" style="color:var(--mute);padding:6px 16px">${esc(tr('history_empty'))}</div>`;
+  document.querySelectorAll('.hist[data-id]').forEach(el => el.onclick = async () => show(await (await fetch('/api/results/' + el.dataset.id)).json()));
+  document.querySelectorAll('[data-del]').forEach(el => el.onclick = () => delResult(+el.dataset.del));
+  document.querySelectorAll('[data-pick]').forEach(el => el.onchange = () => {
+    const id = +el.dataset.pick; el.checked ? picked.add(id) : picked.delete(id); updateCmp();
+  });
+  updateCmp();
+}
+$('hsearch').oninput = () => loadHistory();
+function updateCmp() {
+  $('cmpbar').style.display = picked.size === 2 ? 'block' : 'none';
+}
+$('cmpbtn').onclick = async () => {
+  const [a, b] = [...picked];
+  const [A, B] = await Promise.all([a, b].map(async id => (await fetch('/api/results/' + id)).json()));
+  compare(A, B);
+};
+function compare(A, B) {
+  current = null; layer.clearLayers(); markers = {};
+  const idx = d => Object.fromEntries(d.hops.filter(h => h.ip && !h.label_key).map(h => [h.ip, h]));
+  const ia = idx(A), ib = idx(B);
+  const onlyA = Object.keys(ia).filter(k => !ib[k]), onlyB = Object.keys(ib).filter(k => !ia[k]), both = Object.keys(ia).filter(k => ib[k]);
+  const pa = A.hops.filter(h => h.lat != null).map(h => [h.lat, h.lon]), pb = B.hops.filter(h => h.lat != null).map(h => [h.lat, h.lon]);
+  drawRoute(pa, '#4da3ff'); drawRoute(pb, '#ff9f43');
+  const dot = (h, c) => L.circleMarker([h.lat, h.lon], {radius:6, color:'#fff', weight:2, fillColor:c, fillOpacity:1}).bindPopup(esc(h.ip) + '<br>' + esc(place(h))).addTo(layer);
+  onlyA.forEach(k => ia[k].lat != null && dot(ia[k], '#4da3ff')); onlyB.forEach(k => ib[k].lat != null && dot(ib[k], '#ff9f43'));
+  both.forEach(k => ia[k].lat != null && dot(ia[k], '#5ed39a'));
+  const all = [...pa, ...pb]; if (all.length) map.fitBounds(all, {padding:[50,50], maxZoom:6});
+  const list = (ks, src) => ks.length ? '<ul>' + ks.map(k => `<li>${esc(k)} ${esc(place(src[k]))}</li>`).join('') + '</ul>' : '<div class="m">–</div>';
+  const rows = both.map(k => `<tr><td>${esc(k)}</td><td>${ia[k].rtt_avg ?? ia[k].rtt_ms ?? ''}</td><td>${ib[k].rtt_avg ?? ib[k].rtt_ms ?? ''}</td></tr>`).join('');
+  $('result').innerHTML = `<div class="sec"><b>${esc(tr('compare_title'))}</b><div class="m">A: ${esc(A.query)} (${esc(A.created.slice(0,16))})<br>B: ${esc(B.query)} (${esc(B.created.slice(0,16))})</div></div>
+    <div class="sec"><b style="color:#4da3ff">${esc(tr('only_a'))}</b>${list(onlyA, ia)}</div>
+    <div class="sec"><b style="color:#ff9f43">${esc(tr('only_b'))}</b>${list(onlyB, ib)}</div>
+    <div class="sec"><b style="color:var(--ok)">${esc(tr('common'))}</b><table class="cmp"><tr><th>IP</th><th>A ms</th><th>B ms</th></tr>${rows}</table></div>`;
+}
+
+// ---------- Löschen / Zurücksetzen ----------
+function clearView() { current = null; layer.clearLayers(); markers = {}; $('result').innerHTML = ''; map.setView([30,10], 2); }
+async function delResult(id) {
+  if (!confirm(tr('confirm_delete'))) return;
+  const r = await fetch('/api/results/' + id + '?lang=' + lang, {method:'DELETE'});
+  if (!r.ok) { setStatus(null, (await r.json()).detail); return; }
+  picked.delete(id);
+  if (current && current.id === id) clearView();
+  await loadHistory(); setStatus('status_deleted');
+}
+$('clear-all').onclick = async () => {
+  if (!confirm(tr('confirm_clear', {n: histCount}))) return;
+  await fetch('/api/results', {method:'DELETE'});
+  picked.clear(); clearView(); await loadHistory(); setStatus('status_cleared');
+};
+function resetAll() {
+  $('target').value = ''; $('headers').value = ''; $('eml').value = ''; $('ipv').value = 'auto';
+  clearView(); setStatus('status_reset');
+}
+$('reset-web').onclick = resetAll; $('reset-mail').onclick = resetAll;
+
+// ---------- Einstellungen ----------
+function renderSettingsHints() {
+  if (!settings.local_db_path) return;
+  $('s-hint').textContent = tr('local_only_hint', {path: settings.local_db_path}) + ' — ' + tr(settings.local_db_available ? 'db_found' : 'db_missing');
+  $('s-keyhint').textContent = settings.has_abuseipdb_key ? tr('key_set') : '';
+  $('s-local').disabled = !settings.local_db_available && !settings.local_only;
+  $('s-local').checked = !!settings.local_only;
+  $('s-quit').hidden = !settings.standalone;
+}
+async function loadSettings() { settings = await (await fetch('/api/settings')).json(); renderSettingsHints(); }
+$('gear').onclick = async () => { await loadSettings(); $('s-key').value = ''; $('m-settings').classList.add('on'); };
+$('s-save').onclick = async () => {
+  const body = {local_only: $('s-local').checked};
+  if ($('s-key').value.trim()) body.abuseipdb_key = $('s-key').value.trim();
+  const r = await fetch('/api/settings?lang=' + lang, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  if (!r.ok) { setStatus(null, (await r.json()).detail); } else { settings = await r.json(); setStatus('saved'); }
+  renderSettingsHints(); $('m-settings').classList.remove('on');
+};
+
+$('s-quit').onclick = async () => { await fetch('/api/quit', {method:'POST'}); document.body.innerHTML = '<p style="padding:40px;font:16px system-ui;color:#888">4CPA TraceMap beendet / stopped / arrêté.</p>'; };
+initI18n();
+loadSettings();
+</script>
+</body>
+</html>
