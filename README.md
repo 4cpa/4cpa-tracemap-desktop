@@ -66,4 +66,6 @@ Die Release-Dateien entstehen automatisch per GitHub Actions (`.github/workflows
 
 ## Lizenz und Hinweise
 
-Siehe `NOTICE.md` für Drittkomponenten (u. a. MaxMind GeoLite2, Natural Earth, Leaflet, OpenStreetMap). Betreiber: Transivroom Division, Transivroom, Kasparstrasse 17, 3027 Bern, Schweiz – admin@4cpa.ch. © Transivroom Division 2026.
+Der Code dieses Repositorys steht unter der **MIT-Lizenz** (siehe `LICENSE`). Eingebundene Drittkomponenten behalten ihre eigenen Lizenzen und Bedingungen, siehe `NOTICE.md` (u. a. MaxMind GeoLite2, Natural Earth, Leaflet, OpenStreetMap). Name und Logo «4CPA» sind von der MIT-Lizenz nicht umfasst.
+
+Betreiber: Transivroom Division, Transivroom, Kasparstrasse 17, 3027 Bern, Schweiz – admin@4cpa.ch. © Transivroom Division 2026.
